@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.0.2 FATAL_ERROR)
 
 project(TDLib VERSION 1.5.1 LANGUAGES CXX C)
 
+option (WITH_THREADS "Enable multithreading support" ON)
+option (WITH_TLS "Enable Thread Local Storage (TLS) support" ON)
+
 if (POLICY CMP0054)
   # do not expand quoted arguments
   cmake_policy(SET CMP0054 NEW)
@@ -149,6 +152,14 @@ find_package(Threads REQUIRED)
 if (THREADS_HAVE_PTHREAD_ARG)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
 endif()
+
+if (WITH_THREADS AND Threads_FOUND)
+  if (CMAKE_USE_PTHREADS_INIT)
+    set (HAVE_PTHREAD 1)
+  endif (CMAKE_USE_PTHREADS_INIT)
+else (WITH_THREADS AND Threads_FOUND)
+  set (NO_THREADS 1)
+endif (WITH_THREADS AND Threads_FOUND)
 
 if (MSVC)
   if (CMAKE_CXX_FLAGS_DEBUG MATCHES "/RTC1")
@@ -848,6 +859,33 @@ endif()
 #EXECUTABLES
 if (NOT CMAKE_CROSSCOMPILING)
   add_executable(tg_cli td/telegram/cli.cpp ${TL_TD_JSON})
+
+  check_c_source_compiles ("
+  #define _XOPEN_SOURCE 500
+  #include <pthread.h>
+  int main(void)
+  {
+    pthread_rwlock_t l;
+    pthread_rwlock_init(&l, NULL);
+    pthread_rwlock_rdlock(&l);
+    return 0;
+  }
+  " HAVE_RWLOCK)
+
+  check_cxx_source_compiles ("
+  __thread int tls;
+  int main() { }
+  " HAVE_GCC_TLS)
+
+  check_cxx_source_compiles ("
+  __declspec(thread) int tls;
+  int main() { }
+  " HAVE_MSVC_TLS)
+
+  check_cxx_source_compiles ("
+  thread_local int tls;
+  int main() { }
+  " HAVE_CXX11_TLS)
 
   if (NOT READLINE_FOUND)
     find_package(Readline)
